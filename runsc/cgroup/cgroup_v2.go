@@ -19,6 +19,8 @@ import (
 
 type cgroupV2Manager struct {
 	manager libcontainercgroups.Manager
+	Name    string `json:"name"`
+	Own     bool   `json:"own"`
 }
 
 func NewCgroupV2Manager(name string) (*cgroupV2Manager, error) {
@@ -31,75 +33,76 @@ func NewCgroupV2Manager(name string) (*cgroupV2Manager, error) {
 	log.Debugf("got manager in NEW %v %s", manager, name)
 	return &cgroupV2Manager{
 		manager: manager,
+		Name:    name,
 	}, nil
 }
 
 // Install creates and configures cgroups according to 'res'. If cgroup path
 // already exists, it means that the caller has already provided a
 // pre-configured cgroups, and 'res' is ignored.
-func (c *cgroupV2Manager) Install(name string, res *specs.LinuxResources) (owned bool, err error) {
-	log.Debugf("Creating cgroup %q", name)
+func (c *cgroupV2Manager) Install(res *specs.LinuxResources) (err error) {
+	log.Debugf("Creating cgroup %q", c.Name)
 
-	manager, err := c.getManager(name)
+	manager, err := c.getManager(c.Name)
 	if err != nil {
-		return false, err
+		return err
 	}
 
 	// The Cleanup object cleans up partially created cgroups when an error occurs.
 	// Errors occuring during cleanup itself are ignored.
-	clean := cleanup.Make(func() { _ = c.Uninstall(name, owned) })
+	clean := cleanup.Make(func() { _ = c.Uninstall() })
 	defer clean.Clean()
 
 	// in unified mode, we only need to look at one path
-	path := buildCgroupUnifiedPath(name)
+	path := buildCgroupUnifiedPath(c.Name)
 	if _, err := os.Stat(path); err == nil {
 		// If cgroup has already been created; it has been setup by caller. Don't
 		// make any changes to configuration, just join when sandbox/gofer starts.
 		log.Debugf("Using pre-created cgroup %q", path)
 	} else {
-		owned = true
+		c.Own = true
 		// Apply(-1) is a hack to create the cgroup directories for each resource
 		// subsystem. The function [cgroups.Manager.apply()] applies cgroup
 		// configuration to the process with the specified pid.
 		// It creates cgroup files for each subsystems and writes the pid
 		// in the tasks file. We use the function to create all the required
 		// cgroup files but not attach any "real" pid to the cgroup.
-		log.Debugf("applied cgroup %q %v %s", path, manager, name)
+		log.Debugf("applied cgroup %q %v %s", path, manager, c.Name)
 		if err := manager.Apply(-1); err != nil {
-			return owned, err
+			return err
 		}
 
 		log.Debugf("applied cgroup %q", path)
 
 		// Update the resources config after creation
-		resourcesConfig, err := createCgroupConfigFromResources(name, res)
+		resourcesConfig, err := createCgroupConfigFromResources(c.Name, res)
 		if err != nil {
-			return owned, err
+			return err
 		}
 
 		if err := manager.Set(&libcontainerconfigs.Config{
 			Cgroups: resourcesConfig,
 		}); err != nil {
-			return owned, err
+			return err
 		}
 		log.Debugf("set cgroup %q", path)
 	}
 
 	clean.Release()
-	return owned, nil
+	return nil
 }
 
 // Uninstall removes the settings done in Install(). If cgroup path already
 // existed when Install() was called, Uninstall is a noop.
-func (c *cgroupV2Manager) Uninstall(name string, owned bool) error {
-	log.Debugf("Deleting cgroup %q", name)
+func (c *cgroupV2Manager) Uninstall() error {
+	log.Debugf("Deleting cgroup %q", c.Name)
 
-	if !owned {
+	if !c.Own {
 		// cgroup is managed by caller, don't touch it.
 		return nil
 	}
 
-	manager, err := c.getManager(name)
+	manager, err := c.getManager(c.Name)
 	if err != nil {
 		return err
 	}
@@ -109,24 +112,24 @@ func (c *cgroupV2Manager) Uninstall(name string, owned bool) error {
 
 // Join adds the current process to the all controllers. Returns function that
 // restores cgroup to the original state.
-func (c *cgroupV2Manager) Join(name string) (func(), error) {
+func (c *cgroupV2Manager) Join() (func(), error) {
 	// First save the current state so it can be restored.
 	undo := func() {}
 
-	manager, err := c.getManager(name)
+	manager, err := c.getManager(c.Name)
 	if err != nil {
 		return undo, err
 	}
 
-	log.Warningf("joining cgroup %+v: %s", c.manager, name)
+	log.Warningf("joining cgroup %+v: %s", c.manager, c.Name)
 	// Now join the cgroups.
 	err = manager.Apply(0)
 	return undo, err
 }
 
 // CPUQuota returns the CFS CPU quota.
-func (c *cgroupV2Manager) CPUQuota(name string) (float64, error) {
-	manager, err := c.getManager(name)
+func (c *cgroupV2Manager) CPUQuota() (float64, error) {
+	manager, err := c.getManager(c.Name)
 	if err != nil {
 		return -1, err
 	}
@@ -156,9 +159,15 @@ func (c *cgroupV2Manager) CPUQuota(name string) (float64, error) {
 	return float64(quota) / float64(period), nil
 }
 
+// CPUUsage returns the total CPU usage of the cgroup.
+func (c *cgroupV2Manager) CPUUsage() (uint64, error) {
+	// TODO
+	return 0, nil
+}
+
 // NumCPU returns the number of CPUs configured in 'cpuset/cpuset.cpus'.
-func (c *cgroupV2Manager) NumCPU(name string) (int, error) {
-	manager, err := c.getManager(name)
+func (c *cgroupV2Manager) NumCPU() (int, error) {
+	manager, err := c.getManager(c.Name)
 	if err != nil {
 		return -1, err
 	}
@@ -170,8 +179,8 @@ func (c *cgroupV2Manager) NumCPU(name string) (int, error) {
 }
 
 // MemoryLimit returns the memory limit.
-func (c *cgroupV2Manager) MemoryLimit(name string) (uint64, error) {
-	manager, err := c.getManager(name)
+func (c *cgroupV2Manager) MemoryLimit() (uint64, error) {
+	manager, err := c.getManager(c.Name)
 	if err != nil {
 		return 0, err
 	}

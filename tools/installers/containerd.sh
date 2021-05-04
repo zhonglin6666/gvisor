@@ -28,7 +28,7 @@ else
 fi
 
 # containerd < 1.4 doesn't work with cgroupv2 setup, so we check for that here
-if [[ $(mount | grep "/sys/fs/cgroup type cgroup2 ") && "${CONTAINERD_MAJOR}" -eq 1 ]] && [[ "${CONTAINERD_MINOR}" -le 4 ]]; then
+if [[ $(mount | grep "/sys/fs/cgroup type cgroup2 ") && "${CONTAINERD_MAJOR}" -eq 1 ]] && [[ "${CONTAINERD_MINOR}" -lt 4 ]]; then
 	echo "containerd <= 1.4 does not work with cgroup2"
 	exit 1
 fi

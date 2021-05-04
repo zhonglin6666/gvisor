@@ -63,7 +63,7 @@ var cgroupv2MountInfo = `
 `
 
 func TestUninstallEnoent(t *testing.T) {
-	c := Cgroup{
+	c := cgroupV1{
 		// set a non-existent name
 		Name: "runsc-test-uninstall-656e6f656e740a",
 	}
