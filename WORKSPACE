@@ -180,59 +180,10 @@ go_repository(
 )
 
 go_repository(
-    name = "com_github_checkpoint_restore_go_criu_v4",
-    importpath = "github.com/checkpoint-restore/go-criu/v4",
-    sum = "h1:WW2B2uxx9KWF6bGlHqhm8Okiafwwx7Y2kcpn8lCpjgo=",
-    version = "v4.1.0",
-)
-
-go_repository(
-    name = "com_github_coreos_go_systemd",
-    importpath = "github.com/coreos/go-systemd",
-    sum = "h1:iW4rZ826su+pqaw19uhpSCzhj44qo35pNgKFGqzDKkU=",
-    version = "v0.0.0-20191104093116-d3cd4ed1dbcf",
-)
-
-go_repository(
     name = "com_github_cyphar_filepath_securejoin",
     importpath = "github.com/cyphar/filepath-securejoin",
     sum = "h1:jCwT2GTP+PY5nBz3c/YL5PAIbusElVrPujOBSCj8xRg=",
     version = "v0.2.2",
-)
-
-go_repository(
-    name = "com_github_moby_sys_mountinfo",
-    importpath = "github.com/moby/sys/mountinfo",
-    sum = "h1:KIrhRO14+AkwKvG/g2yIpNMOUVZ02xNhOw8KY1WsLOI=",
-    version = "v0.1.3",
-)
-
-go_repository(
-    name = "com_github_mrunalp_fileutils",
-    importpath = "github.com/mrunalp/fileutils",
-    sum = "h1:aZQToFSLH8ejFeSkTc3r3L4dPImcj7Ib/KgmkQqbGGg=",
-    version = "v0.0.0-20200520151820-abd8a0e76976",
-)
-
-go_repository(
-    name = "com_github_opencontainers_selinux",
-    importpath = "github.com/opencontainers/selinux",
-    sum = "h1:+bIAS/Za3q5FTwWym4fTB0vObnfCf3G/NC7K6Jx62mY=",
-    version = "v1.6.0",
-)
-
-go_repository(
-    name = "com_github_seccomp_libseccomp_golang",
-    importpath = "github.com/seccomp/libseccomp-golang",
-    sum = "h1:NJjM5DNFOs0s3kYE1WUOr6G8V97sdt46rlXTMfXGWBo=",
-    version = "v0.9.1",
-)
-
-go_repository(
-    name = "com_github_willf_bitset",
-    importpath = "github.com/willf/bitset",
-    sum = "h1:R43TdZy32XXSXjJn7M/HhALJ9imq6ztLnChfYJpVDnM=",
-    version = "v1.1.11-0.20200630133818-d5bec3311243",
 )
 
 rules_proto_dependencies()
