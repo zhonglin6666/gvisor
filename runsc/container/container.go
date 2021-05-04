@@ -238,10 +238,6 @@ func New(conf *config.Config, args Args) (*Container, error) {
 			return nil, err
 		}
 		if cg != nil {
-			// TODO(gvisor.dev/issue/3481): Remove when cgroups v2 is supported.
-			if !conf.Rootless && cgroup.IsOnlyV2() {
-				return nil, fmt.Errorf("cgroups V2 is not yet supported. Enable cgroups V1 and retry")
-			}
 			// If there is cgroup config, install it before creating sandbox process.
 			if err := cg.Install(args.Spec.Linux.Resources); err != nil {
 				switch {

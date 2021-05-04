@@ -223,53 +223,10 @@ func loadPathsHelper(cgroup io.Reader) (map[string]string, error) {
 	}
 	defer mountinfo.Close()
 
-	if libcontainercgroups.IsCgroup2UnifiedMode() {
-		return loadPathsHelperV2WithMountinfo(cgroup, mountinfo)
-	}
-
 	return loadPathsHelperWithMountinfo(cgroup, mountinfo)
 }
 
-func loadPathsHelperV2WithMountinfo(cgroup, mountinfo io.Reader) (map[string]string, error) {
-	paths := make(map[string]string)
-	controller := "cgroup2"
-
-	scanner := bufio.NewScanner(cgroup)
-	for scanner.Scan() {
-		// Format: ID::path
-		// Example: 0::/user.slice
-		tokens := strings.Split(scanner.Text(), ":")
-		if len(tokens) != 3 || len(tokens[1]) != 0 {
-			return nil, fmt.Errorf("invalid cgroups file, line: %q", scanner.Text())
-		}
-		paths[controller] = tokens[2]
-		break
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-
-	mfScanner := bufio.NewScanner(mountinfo)
-	for mfScanner.Scan() {
-		txt := mfScanner.Text()
-		fields := strings.Fields(txt)
-		if len(fields) < 9 || fields[len(fields)-3] != "cgroup2" {
-			continue
-		}
-		root := fields[3]
-		cgroupPath := paths[controller]
-		relCgroupPath, err := filepath.Rel(root, cgroupPath)
-		if err != nil {
-			return nil, err
-		}
-		paths[controller] = relCgroupPath
-	}
-	if err := mfScanner.Err(); err != nil {
-		return nil, err
-	}
-
-	return paths, nil
-}
+const cgroup2 = "cgroup2"
 
 func loadPathsHelperWithMountinfo(cgroup, mountinfo io.Reader) (map[string]string, error) {
 	paths := make(map[string]string)
@@ -283,7 +240,7 @@ func loadPathsHelperWithMountinfo(cgroup, mountinfo io.Reader) (map[string]strin
 			return nil, fmt.Errorf("invalid cgroups file, line: %q", scanner.Text())
 		}
 		if len(tokens[1]) == 0 {
-			continue
+			paths[cgroup2] = tokens[2]
 		}
 		for _, ctrlr := range strings.Split(tokens[1], ",") {
 			// Remove prefix for cgroups with no controller, eg. systemd.
@@ -299,20 +256,31 @@ func loadPathsHelperWithMountinfo(cgroup, mountinfo io.Reader) (map[string]strin
 	for mfScanner.Scan() {
 		txt := mfScanner.Text()
 		fields := strings.Fields(txt)
-		if len(fields) < 9 || fields[len(fields)-3] != "cgroup" {
+		if len(fields) < 9 {
 			continue
 		}
-		for _, opt := range strings.Split(fields[len(fields)-1], ",") {
-			// Remove prefix for cgroups with no controller, eg. systemd.
-			opt = strings.TrimPrefix(opt, "name=")
-			if cgroupPath, ok := paths[opt]; ok {
-				root := fields[3]
-				relCgroupPath, err := filepath.Rel(root, cgroupPath)
-				if err != nil {
-					return nil, err
+		if fields[len(fields)-3] == "cgroup" {
+			for _, opt := range strings.Split(fields[len(fields)-1], ",") {
+				// Remove prefix for cgroups with no controller, eg. systemd.
+				opt = strings.TrimPrefix(opt, "name=")
+				if cgroupPath, ok := paths[opt]; ok {
+					root := fields[3]
+					relCgroupPath, err := filepath.Rel(root, cgroupPath)
+					if err != nil {
+						return nil, err
+					}
+					paths[opt] = relCgroupPath
 				}
-				paths[opt] = relCgroupPath
 			}
+		}
+		if fields[len(fields)-3] == "cgroup2" {
+			root := fields[3]
+			cgroupPath := paths[cgroup2]
+			relCgroupPath, err := filepath.Rel(root, cgroupPath)
+			if err != nil {
+				return nil, err
+			}
+			paths[cgroup2] = relCgroupPath
 		}
 	}
 	if err := mfScanner.Err(); err != nil {
