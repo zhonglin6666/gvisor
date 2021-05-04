@@ -63,7 +63,7 @@ var cgroupv2MountInfo = `
 `
 
 func TestUninstallEnoent(t *testing.T) {
-	c := Cgroup{
+	c := cgroupV1{
 		// set a non-existent name
 		Name: "runsc-test-uninstall-656e6f656e740a",
 	}
@@ -725,8 +725,9 @@ func TestLoadPaths(t *testing.T) {
 				"2::/empty\n",
 			mountinfo: debianMountinfo,
 			want: map[string]string{
-				"ctr0": "/path0",
-				"ctr1": "/path1",
+				"ctr0":    "/path0",
+				"ctr1":    "/path1",
+				"cgroup2": "empty",
 			},
 		},
 		{
@@ -765,6 +766,7 @@ func TestLoadPaths(t *testing.T) {
 				"cpu":     ".",
 				"cpuacct": ".",
 				"systemd": ".",
+				"cgroup2": "/system.slice/containerd.service",
 			},
 		},
 		{
@@ -847,7 +849,7 @@ func TestLoadPathsCgroupv2(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := strings.NewReader(tc.cgroups)
 			mountinfo := strings.NewReader(tc.mountinfo)
-			got, err := loadPathsHelperV2WithMountinfo(r, mountinfo)
+			got, err := loadPathsHelperWithMountinfo(r, mountinfo)
 			if len(tc.err) == 0 {
 				if err != nil {
 					t.Fatalf("Unexpected error: %v", err)

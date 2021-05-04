@@ -358,7 +358,7 @@ func (c *Container) Start(conf *config.Config) error {
 	} else {
 		// Join cgroup to start gofer process to ensure it's part of the cgroup from
 		// the start (and all their children processes).
-		if err := runInCgroup(c.Sandbox.Cgroup, func() error {
+		if err := runInCgroup(c.Sandbox.Cgroup.Cgroup, func() error {
 			// Create the gofer process.
 			goferFiles, mountsFile, err := c.createGoferProcess(c.Spec, conf, c.BundleDir, false)
 			if err != nil {
@@ -747,7 +747,7 @@ func (c *Container) saveLocked() error {
 // root containers), and waits for the container or sandbox and the gofer
 // to stop. If any of them doesn't stop before timeout, an error is returned.
 func (c *Container) stop() error {
-	var cgroup *cgroup.Cgroup
+	var cgroup cgroup.Cgroup
 
 	if c.Sandbox != nil {
 		log.Debugf("Destroying container, cid: %s", c.ID)
@@ -756,7 +756,7 @@ func (c *Container) stop() error {
 		}
 		// Only uninstall cgroup for sandbox stop.
 		if c.Sandbox.IsRootContainer(c.ID) {
-			cgroup = c.Sandbox.Cgroup
+			cgroup = c.Sandbox.Cgroup.Cgroup
 		}
 		// Only set sandbox to nil after it has been told to destroy the container.
 		c.Sandbox = nil
@@ -1011,7 +1011,7 @@ func isRoot(spec *specs.Spec) bool {
 
 // runInCgroup executes fn inside the specified cgroup. If cg is nil, execute
 // it in the current context.
-func runInCgroup(cg *cgroup.Cgroup, fn func() error) error {
+func runInCgroup(cg cgroup.Cgroup, fn func() error) error {
 	if cg == nil {
 		return fn()
 	}

@@ -19,6 +19,7 @@ package cgroup
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -241,11 +242,12 @@ func loadPathsHelperWithMountinfo(cgroup, mountinfo io.Reader) (map[string]strin
 		}
 		if len(tokens[1]) == 0 {
 			paths[cgroup2] = tokens[2]
-		}
-		for _, ctrlr := range strings.Split(tokens[1], ",") {
-			// Remove prefix for cgroups with no controller, eg. systemd.
-			ctrlr = strings.TrimPrefix(ctrlr, "name=")
-			paths[ctrlr] = tokens[2]
+		} else {
+			for _, ctrlr := range strings.Split(tokens[1], ",") {
+				// Remove prefix for cgroups with no controller, eg. systemd.
+				ctrlr = strings.TrimPrefix(ctrlr, "name=")
+				paths[ctrlr] = tokens[2]
+			}
 		}
 	}
 	if err := scanner.Err(); err != nil {
@@ -275,12 +277,13 @@ func loadPathsHelperWithMountinfo(cgroup, mountinfo io.Reader) (map[string]strin
 		}
 		if fields[len(fields)-3] == "cgroup2" {
 			root := fields[3]
-			cgroupPath := paths[cgroup2]
-			relCgroupPath, err := filepath.Rel(root, cgroupPath)
-			if err != nil {
-				return nil, err
+			if cgroupPath, ok := paths[cgroup2]; ok {
+				relCgroupPath, err := filepath.Rel(root, cgroupPath)
+				if err != nil {
+					return nil, err
+				}
+				paths[cgroup2] = relCgroupPath
 			}
-			paths[cgroup2] = relCgroupPath
 		}
 	}
 	if err := mfScanner.Err(); err != nil {
@@ -290,28 +293,41 @@ func loadPathsHelperWithMountinfo(cgroup, mountinfo io.Reader) (map[string]strin
 	return paths, nil
 }
 
-// Cgroup represents a group inside all controllers. For example:
+// Cgroup represents a cgroup configuration.
+type Cgroup interface {
+	Install(res *specs.LinuxResources) error
+	Uninstall() error
+	Join() (func(), error)
+	CPUQuota() (float64, error)
+	CPUUsage() (uint64, error)
+	NumCPU() (int, error)
+	MemoryLimit() (uint64, error)
+}
+
+// cgroupV1 represents a group inside all controllers. For example:
 //   Name='/foo/bar' maps to /sys/fs/cgroup/<controller>/foo/bar on
 //   all controllers.
-type Cgroup struct {
+type cgroupV1 struct {
 	Name    string            `json:"name"`
 	Parents map[string]string `json:"parents"`
 	Own     map[string]bool   `json:"own"`
-
-	v2manager *cgroupV2Manager
 }
 
-// New creates a new Cgroup instance if the spec includes a cgroup path.
+// New creates a new cgroupV1 instance if the spec includes a cgroup path.
 // Returns nil otherwise.
-func New(spec *specs.Spec) (*Cgroup, error) {
+func New(spec *specs.Spec) (Cgroup, error) {
 	if spec.Linux == nil || spec.Linux.CgroupsPath == "" {
 		return nil, nil
 	}
 	return NewFromPath(spec.Linux.CgroupsPath)
 }
 
-// NewFromPath creates a new Cgroup instance.
-func NewFromPath(cgroupsPath string) (*Cgroup, error) {
+// NewFromPath creates a new cgroupV1 instance.
+func NewFromPath(cgroupsPath string) (Cgroup, error) {
+	if libcontainercgroups.IsCgroup2UnifiedMode() {
+		return NewCgroupV2Manager(cgroupsPath)
+	}
+
 	var parents map[string]string
 	if !filepath.IsAbs(cgroupsPath) {
 		var err error
@@ -322,44 +338,63 @@ func NewFromPath(cgroupsPath string) (*Cgroup, error) {
 	}
 	own := make(map[string]bool)
 
-	return &Cgroup{
+	return &cgroupV1{
 		Name:    cgroupsPath,
 		Parents: parents,
 		Own:     own,
 	}, nil
 }
 
-func (c *Cgroup) cgroupv2Manager() (*cgroupV2Manager, error) {
-	if c.v2manager != nil {
-		return c.v2manager, nil
+// CgroupJSON is a wrapper for Cgroup that can be encoded to JSON.
+type CgroupJSON struct {
+	Cgroup Cgroup `json:"cgroup"`
+}
+
+type cgroupJSONv1 struct {
+	Cgroup *cgroupV1 `json:"cgroup"`
+}
+
+type cgroupJSONv2 struct {
+	Cgroup *cgroupV2Manager `json:"cgroup"`
+}
+
+// UnmarshalJSON implements json.Unmarshaler.UnmarshalJSON
+func (c *CgroupJSON) UnmarshalJSON(data []byte) error {
+	if libcontainercgroups.IsCgroup2UnifiedMode() {
+		v2 := cgroupJSONv2{}
+		err := json.Unmarshal(data, &v2)
+		if v2.Cgroup != nil {
+			c.Cgroup = v2.Cgroup
+		}
+		return err
 	}
-	m, err := NewCgroupV2Manager(c.Name)
-	if err != nil {
-		return nil, err
+	v1 := cgroupJSONv1{}
+	err := json.Unmarshal(data, &v1)
+	if v1.Cgroup != nil {
+		c.Cgroup = v1.Cgroup
 	}
-	c.v2manager = m
-	return c.v2manager, nil
+	return err
+}
+
+// MarshalJSON implements json.Marshaler.MarshalJSON
+func (c *CgroupJSON) MarshalJSON() ([]byte, error) {
+	if c.Cgroup == nil {
+		v1 := cgroupJSONv1{}
+		return json.Marshal(&v1)
+	}
+	if libcontainercgroups.IsCgroup2UnifiedMode() {
+		v2 := cgroupJSONv2{Cgroup: c.Cgroup.(*cgroupV2Manager)}
+		return json.Marshal(&v2)
+	}
+	v1 := cgroupJSONv1{Cgroup: c.Cgroup.(*cgroupV1)}
+	return json.Marshal(&v1)
 }
 
 // Install creates and configures cgroups according to 'res'. If cgroup path
 // already exists, it means that the caller has already provided a
 // pre-configured cgroups, and 'res' is ignored.
-func (c *Cgroup) Install(res *specs.LinuxResources) error {
+func (c *cgroupV1) Install(res *specs.LinuxResources) error {
 	log.Debugf("Creating cgroup %q", c.Name)
-
-	if libcontainercgroups.IsCgroup2UnifiedMode() {
-		m, err := c.cgroupv2Manager()
-		if err != nil {
-			return err
-		}
-
-		owned, err := m.Install(c.Name, res)
-		// Mark that cgroup resources are owned by me.
-		for key, _ := range controllers {
-			c.Own[key] = owned
-		}
-		return err
-	}
 
 	// The Cleanup object cleans up partially created cgroups when an error occurs.
 	// Errors occuring during cleanup itself are ignored.
@@ -395,22 +430,8 @@ func (c *Cgroup) Install(res *specs.LinuxResources) error {
 
 // Uninstall removes the settings done in Install(). If cgroup path already
 // existed when Install() was called, Uninstall is a noop.
-func (c *Cgroup) Uninstall() error {
+func (c *cgroupV1) Uninstall() error {
 	log.Debugf("Deleting cgroup %q", c.Name)
-
-	if libcontainercgroups.IsCgroup2UnifiedMode() {
-		m, err := c.cgroupv2Manager()
-		if err != nil {
-			return err
-		}
-
-		var owned bool
-		for _, v := range c.Own {
-			owned = v
-			break
-		}
-		return m.Uninstall(c.Name, owned)
-	}
 
 	for key := range controllers {
 		if !c.Own[key] {
@@ -442,16 +463,7 @@ func (c *Cgroup) Uninstall() error {
 
 // Join adds the current process to the all controllers. Returns function that
 // restores cgroup to the original state.
-func (c *Cgroup) Join() (func(), error) {
-	if libcontainercgroups.IsCgroup2UnifiedMode() {
-		m, err := c.cgroupv2Manager()
-		if err != nil {
-			return func() {}, err
-		}
-
-		return m.Join(c.Name)
-	}
-
+func (c *cgroupV1) Join() (func(), error) {
 	// First save the current state so it can be restored.
 	undo := func() {}
 	paths, err := LoadPaths("self")
@@ -460,6 +472,9 @@ func (c *Cgroup) Join() (func(), error) {
 	}
 	var undoPaths []string
 	for ctrlr, path := range paths {
+		if ctrlr == cgroup2 {
+			continue
+		}
 		// Skip controllers we don't handle.
 		if _, ok := controllers[ctrlr]; ok {
 			fullPath := filepath.Join(cgroupRoot, ctrlr, path)
@@ -482,6 +497,9 @@ func (c *Cgroup) Join() (func(), error) {
 
 	// Now join the cgroups.
 	for key, cfg := range controllers {
+		if key == cgroup2 {
+			continue
+		}
 		path := c.makePath(key)
 		log.Debugf("Joining cgroup %q", path)
 		// Writing the value 0 to a cgroup.procs file causes the
@@ -498,16 +516,7 @@ func (c *Cgroup) Join() (func(), error) {
 }
 
 // CPUQuota returns the CFS CPU quota.
-func (c *Cgroup) CPUQuota() (float64, error) {
-	if libcontainercgroups.IsCgroup2UnifiedMode() {
-		m, err := c.cgroupv2Manager()
-		if err != nil {
-			return -1, err
-		}
-
-		return m.CPUQuota(c.Name)
-	}
-
+func (c *cgroupV1) CPUQuota() (float64, error) {
 	path := c.makePath("cpu")
 	quota, err := getInt(path, "cpu.cfs_quota_us")
 	if err != nil {
@@ -524,7 +533,7 @@ func (c *Cgroup) CPUQuota() (float64, error) {
 }
 
 // CPUUsage returns the total CPU usage of the cgroup.
-func (c *Cgroup) CPUUsage() (uint64, error) {
+func (c *cgroupV1) CPUUsage() (uint64, error) {
 	path := c.makePath("cpuacct")
 	usage, err := getValue(path, "cpuacct.usage")
 	if err != nil {
@@ -534,16 +543,7 @@ func (c *Cgroup) CPUUsage() (uint64, error) {
 }
 
 // NumCPU returns the number of CPUs configured in 'cpuset/cpuset.cpus'.
-func (c *Cgroup) NumCPU() (int, error) {
-	if libcontainercgroups.IsCgroup2UnifiedMode() {
-		m, err := c.cgroupv2Manager()
-		if err != nil {
-			return 0, err
-		}
-
-		return m.NumCPU(c.Name)
-	}
-
+func (c *cgroupV1) NumCPU() (int, error) {
 	path := c.makePath("cpuset")
 	cpuset, err := getValue(path, "cpuset.cpus")
 	if err != nil {
@@ -553,16 +553,7 @@ func (c *Cgroup) NumCPU() (int, error) {
 }
 
 // MemoryLimit returns the memory limit.
-func (c *Cgroup) MemoryLimit() (uint64, error) {
-	if libcontainercgroups.IsCgroup2UnifiedMode() {
-		m, err := c.cgroupv2Manager()
-		if err != nil {
-			return 0, err
-		}
-
-		return m.MemoryLimit(c.Name)
-	}
-
+func (c *cgroupV1) MemoryLimit() (uint64, error) {
 	path := c.makePath("memory")
 	limStr, err := getValue(path, "memory.limit_in_bytes")
 	if err != nil {
@@ -571,7 +562,7 @@ func (c *Cgroup) MemoryLimit() (uint64, error) {
 	return strconv.ParseUint(strings.TrimSpace(limStr), 10, 64)
 }
 
-func (c *Cgroup) makePath(controllerName string) string {
+func (c *cgroupV1) makePath(controllerName string) string {
 	path := c.Name
 	if parent, ok := c.Parents[controllerName]; ok {
 		path = filepath.Join(parent, c.Name)
