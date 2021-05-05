@@ -186,6 +186,13 @@ go_repository(
     version = "v0.2.2",
 )
 
+go_repository(
+    name = "com_github_moby_sys_mountinfo",
+    importpath = "github.com/moby/sys/mountinfo",
+    sum = "h1:1O+1cHA1aujwEwwVMa2Xm2l+gIpUHyd3+D+d7LZh1kM=",
+    version = "v0.4.1",
+)
+
 rules_proto_dependencies()
 
 rules_proto_toolchains()
@@ -767,8 +774,8 @@ go_repository(
 go_repository(
     name = "com_github_opencontainers_runc",
     importpath = "github.com/opencontainers/runc",
-    sum = "h1:+IczUKCRzDzFDnw99O/PAqrcBBCoRp9xN3cB1SYSNS4=",
-    version = "v1.0.0-rc92",
+    sum = "h1:x2UMpOOVf3kQ8arv/EsDGwim8PTNqzL1/EYDr/+scOM=",
+    version = "v1.0.0-rc93",
 )
 
 go_repository(
