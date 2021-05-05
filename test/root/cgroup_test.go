@@ -526,7 +526,7 @@ func TestCgroupParent(t *testing.T) {
 		dir := filepath.Dir(cgroups["cgroup2"])
 		path = filepath.Join("/sys/fs/cgroup/", dir, parent, gid, "cgroup.procs")
 	} else {
-		path = filepath.Join("/sys/fs/cgroup/", cgroups["memory"], parent, gid, "cgroup.procs")
+		path = filepath.Join("/sys/fs/cgroup/memory/", cgroups["memory"], parent, gid, "cgroup.procs")
 	}
 	if err := verifyPid(pid, path); err != nil {
 		t.Errorf("cgroup control %q processes: %v", "memory", err)
