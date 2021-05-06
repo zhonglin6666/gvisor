@@ -10,7 +10,7 @@ require (
 	github.com/cenkalti/backoff v1.1.1-0.20190506075156-2146c9339422 // indirect
 	github.com/containerd/cgroups v0.0.0-20201119153540-4cbc285b3327 // indirect
 	github.com/containerd/console v1.0.1 // indirect
-	github.com/containerd/containerd v1.3.9 // indirect
+	github.com/containerd/containerd v1.4.3 // indirect
 	github.com/containerd/continuity v0.0.0-20210208174643-50096c924a4e // indirect
 	github.com/containerd/fifo v0.0.0-20191213151349-ff969a566b00 // indirect
 	github.com/containerd/go-runc v0.0.0-20200220073739-7016d3ce2328 // indirect
