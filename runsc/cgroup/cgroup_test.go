@@ -58,12 +58,8 @@ var dindMountinfo = `
 18 05 0:46 / /sys/fs/cgroup/rdma ro master:26 - cgroup cgroup rw,rdma
 `
 
-var cgroupv2MountInfo = `
-29 22 0:26 / /sys/fs/cgroup rw shared:4 - cgroup2 cgroup2 rw,seclabel,nsdelegate
-`
-
 func TestUninstallEnoent(t *testing.T) {
-	c := cgroupV1{
+	c := CgroupV1{
 		// set a non-existent name
 		Name: "runsc-test-uninstall-656e6f656e740a",
 	}

@@ -523,14 +523,13 @@ func TestCgroupParent(t *testing.T) {
 		// under the parent of the current execution process. The container manager
 		// is containerd which lives in /system.slice/containerd.service, so its parent
 		// is system.slice
-		dir := filepath.Dir(cgroups["cgroup2"])
-		path = filepath.Join("/sys/fs/cgroup/", dir, parent, gid, "cgroup.procs")
+		path = filepath.Join("/sys/fs/cgroup/", parent, gid, "cgroup.procs")
 	} else {
 		cgroups, err := cgroup.NewFromPid(ppid)
 		if err != nil {
 			t.Fatalf("cgroup.NewFromPid(%d): %v", ppid, err)
 		}
-		path = filepath.Join(cgroups.MakePath("cpuacct"), parent, gid, "cgroup.procs")
+		path = filepath.Join(cgroups.(*cgroup.CgroupV1).MakePath("cpuacct"), parent, gid, "cgroup.procs")
 	}
 	if err := verifyPid(pid, path); err != nil {
 		t.Errorf("cgroup control %q processes: %v", "memory", err)

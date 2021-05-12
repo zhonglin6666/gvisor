@@ -1138,8 +1138,8 @@ func (c *Container) populateStats(event *boot.EventOut) {
 		}
 	}
 
-	cgroup, err := c.Sandbox.NewCGroup()
-	if err != nil {
+	cgroup := c.Sandbox.Cgroup.Cgroup
+	if cgroup == nil {
 		// No cgroup, so rely purely on the sentry's accounting.
 		log.Warningf("events: no cgroups")
 		event.Event.Data.CPU.Usage.Total = containerUsage

@@ -113,7 +113,6 @@ func (c *cgroupV2Manager) Uninstall() error {
 // Join adds the current process to the all controllers. Returns function that
 // restores cgroup to the original state.
 func (c *cgroupV2Manager) Join() (func(), error) {
-	// First save the current state so it can be restored.
 	undo := func() {}
 
 	manager, err := c.getManager(c.Name)
@@ -161,8 +160,15 @@ func (c *cgroupV2Manager) CPUQuota() (float64, error) {
 
 // CPUUsage returns the total CPU usage of the cgroup.
 func (c *cgroupV2Manager) CPUUsage() (uint64, error) {
-	// TODO
-	return 0, nil
+	manager, err := c.getManager(c.Name)
+	if err != nil {
+		return 0, err
+	}
+	stats, err := manager.GetStats()
+	if err != nil {
+		return 0, err
+	}
+	return stats.CpuStats.CpuUsage.TotalUsage, nil
 }
 
 // NumCPU returns the number of CPUs configured in 'cpuset/cpuset.cpus'.
