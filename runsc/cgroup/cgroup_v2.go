@@ -112,29 +112,6 @@ func (c *cgroupV2Manager) Uninstall(name string, owned bool) error {
 func (c *cgroupV2Manager) Join(name string) (func(), error) {
 	// First save the current state so it can be restored.
 	undo := func() {}
-	var currentCgroup string
-	currentCgroupPaths, err := LoadPaths("self")
-	if err != nil {
-		return undo, err
-	}
-
-	// since this is unified, get the first path of current process's cgroup is enough
-	for _, v := range currentCgroupPaths {
-		currentCgroup = filepath.Join(cgroupRoot, v)
-		break
-	}
-
-	// Replace empty undo with the real thing before changes are made to cgroups.
-	undo = func() {
-		log.Debugf("Restoring cgroup %q", currentCgroup)
-		undoManager, err := cgroupfs2.NewManager(nil, currentCgroup, false)
-		if err != nil {
-			log.Warningf("Error restoring cgroup v2 %q: failed to create cgroupfs2 manager %v", currentCgroup, err)
-		}
-		if err := undoManager.Apply(0); err != nil {
-			log.Warningf("Error restoring cgroup v2 %q: %v", currentCgroup, err)
-		}
-	}
 
 	manager, err := c.getManager(name)
 	if err != nil {
