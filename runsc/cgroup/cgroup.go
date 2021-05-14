@@ -234,6 +234,9 @@ func loadPathsHelper(cgroup, mountinfo io.Reader) (map[string]string, error) {
 		if len(tokens) != 3 {
 			return nil, fmt.Errorf("invalid cgroups file, line: %q", scanner.Text())
 		}
+		if len(tokens[1]) == 0 {
+			continue
+		}
 		for _, ctrlr := range strings.Split(tokens[1], ",") {
 			// Remove prefix for cgroups with no controller, eg. systemd.
 			ctrlr = strings.TrimPrefix(ctrlr, "name=")
