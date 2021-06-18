@@ -7,7 +7,7 @@ function install_pkgs() {
     fi
   done
 }
-install_pkgs make "linux-headers-$(uname -r)" linux-libc-dev \
+install_pkgs make linux-libc-dev \
   graphviz jq curl binutils gnupg gnupg-agent golang-go \
   apt-transport-https ca-certificates software-properties-common
 
