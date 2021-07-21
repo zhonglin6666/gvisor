@@ -413,6 +413,7 @@ func (e *endpoint) dupTentativeAddrDetected(addr tcpip.Address, holderLinkAddr t
 
 		switch t := addressEndpoint.ConfigType(); t {
 		case stack.AddressConfigStatic:
+		case stack.AddressConfigTemp:
 		case stack.AddressConfigSlaac:
 			e.mu.ndp.regenerateSLAACAddr(prefix)
 		case stack.AddressConfigSlaacTemp:
@@ -1899,7 +1900,7 @@ func (e *endpoint) acquireOutgoingPrimaryAddressRLocked(remoteAddr tcpip.Address
 		}
 
 		// Prefer temporary addresses as per RFC 6724 section 5 rule 7.
-		if saTemp, sbTemp := sa.addressEndpoint.ConfigType() == stack.AddressConfigSlaacTemp, sb.addressEndpoint.ConfigType() == stack.AddressConfigSlaacTemp; saTemp != sbTemp {
+		if saTemp, sbTemp := sa.addressEndpoint.ConfigType().IsIPv6Temporary(), sb.addressEndpoint.ConfigType().IsIPv6Temporary(); saTemp != sbTemp {
 			return saTemp
 		}
 
@@ -2065,7 +2066,7 @@ func (p *protocol) NewEndpoint(nic stack.NetworkInterface, dispatcher stack.Tran
 	}
 
 	e.mu.Lock()
-	e.mu.addressableEndpointState.Init(e)
+	e.mu.addressableEndpointState.Init(e, p.stack)
 	e.mu.ndp.init(e, dadOptions)
 	e.mu.mld.init(e)
 	e.dad.mu.Lock()

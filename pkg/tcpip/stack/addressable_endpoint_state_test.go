@@ -16,8 +16,10 @@ package stack_test
 
 import (
 	"testing"
+	"time"
 
 	"gvisor.dev/gvisor/pkg/tcpip"
+	"gvisor.dev/gvisor/pkg/tcpip/faketime"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 )
 
@@ -30,7 +32,7 @@ func TestAddressableEndpointStateCleanup(t *testing.T) {
 	}
 
 	var s stack.AddressableEndpointState
-	s.Init(&ep)
+	s.Init(&ep, nil)
 
 	addr := tcpip.AddressWithPrefix{
 		Address:   "\x01",
@@ -38,9 +40,10 @@ func TestAddressableEndpointStateCleanup(t *testing.T) {
 	}
 
 	{
-		ep, err := s.AddAndAcquirePermanentAddress(addr, stack.AddressProperties{PEB: stack.NeverPrimaryEndpoint})
+		properties := stack.AddressProperties{PEB: stack.NeverPrimaryEndpoint}
+		ep, err := s.AddAndAcquirePermanentAddress(addr, properties)
 		if err != nil {
-			t.Fatalf("s.AddAndAcquirePermanentAddress(%s, AddressProperties{PEB: NeverPrimaryEndpoint}): %s", addr, err)
+			t.Fatalf("s.AddAndAcquirePermanentAddress(%s, %+v): %s", addr, properties, err)
 		}
 		// We don't need the address endpoint.
 		ep.DecRef()
@@ -58,4 +61,71 @@ func TestAddressableEndpointStateCleanup(t *testing.T) {
 		ep.DecRef()
 		t.Fatalf("got s.AcquireAssignedAddress(%s, false, NeverPrimaryEndpoint) = %s, want = nil", addr.Address, ep.AddressWithPrefix())
 	}
+}
+
+func TestAddressLifetimes(t *testing.T) {
+	var fakeEp fakeNetworkEndpoint
+	if err := fakeEp.Enable(); err != nil {
+		t.Fatalf("fakeEp.Enable(): %s", err)
+	}
+
+	var s stack.AddressableEndpointState
+	clock := faketime.NewManualClock()
+	s.Init(&fakeEp, stack.New(stack.Options{
+		Clock: clock,
+	}))
+
+	// Add an address that is FirstPrimaryEndpoint which will be deprecated after
+	// some time and then invalidated after some more time.
+	addr := tcpip.AddressWithPrefix{
+		Address:   "\x02",
+		PrefixLen: 8,
+	}
+	preferredLifetime := 7 * time.Hour
+	validLifetime := 12 * time.Hour
+
+	properties := stack.AddressProperties{PEB: stack.FirstPrimaryEndpoint, PreferredLifetime: &preferredLifetime, ValidLifetime: &validLifetime}
+	ep, err := s.AddAndAcquirePermanentAddress(addr, properties)
+	if err != nil {
+		t.Fatalf("s.AddAndAcquirePermanentAddress(%s, %+v): %s", addr, properties, err)
+	}
+
+	got := s.AcquireOutgoingPrimaryAddress("", false /* allowExpired */)
+	if got != ep {
+		t.Fatalf("got s.AcquireOutgoingPrimaryAddress(\"\", false) = nil, want = %+v", ep)
+	}
+	got.DecRef()
+
+	clock.Advance(preferredLifetime + time.Hour)
+
+	if !ep.Deprecated() {
+		t.Fatalf("got ep.Deprecated() = false, want = true")
+	}
+	{
+		addr := tcpip.AddressWithPrefix{
+			Address:   "\x03",
+			PrefixLen: 8,
+		}
+		ep, err := s.AddAndAcquirePermanentAddress(addr, stack.AddressProperties{})
+		if err != nil {
+			t.Fatalf("s.AddAndAcquirePermanentAddress(%s, {}): %s", addr, err)
+		}
+
+		got := s.AcquireOutgoingPrimaryAddress("", false /* allowExpired */)
+		if got != ep {
+			t.Fatalf("got s.AcquireOutgoingPrimaryAddress(\"\", false) = nil, want = %+v", ep)
+		}
+		got.DecRef()
+
+		ep.DecRef()
+		if err := s.RemovePermanentEndpoint(ep); err != nil {
+			t.Fatalf("s.RemovePermanentEndpoint(ep): %s", err)
+		}
+	}
+
+	clock.Advance(validLifetime - preferredLifetime)
+	if got := s.AcquireOutgoingPrimaryAddress("", false /* allowExpired */); got != nil {
+		t.Fatalf("got s.AcquireOutgoingPrimaryAddress(\"\", false) = %+v, want = nil", got)
+	}
+	got.DecRef()
 }

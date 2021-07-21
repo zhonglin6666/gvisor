@@ -139,7 +139,7 @@ func (p *testIPv6Protocol) NewEndpoint(nic NetworkInterface, _ TransportDispatch
 		nic:      nic,
 		protocol: p,
 	}
-	e.AddressableEndpointState.Init(e)
+	e.AddressableEndpointState.Init(e, nil)
 	return e
 }
 

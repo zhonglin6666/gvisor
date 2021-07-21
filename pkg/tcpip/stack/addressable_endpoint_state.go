@@ -26,6 +26,7 @@ var _ AddressableEndpoint = (*AddressableEndpointState)(nil)
 // AddressableEndpointState is an implementation of an AddressableEndpoint.
 type AddressableEndpointState struct {
 	networkEndpoint NetworkEndpoint
+	stack           *Stack
 
 	// Lock ordering (from outer to inner lock ordering):
 	//
@@ -42,8 +43,9 @@ type AddressableEndpointState struct {
 // Init initializes the AddressableEndpointState with networkEndpoint.
 //
 // Must be called before calling any other function on m.
-func (a *AddressableEndpointState) Init(networkEndpoint NetworkEndpoint) {
+func (a *AddressableEndpointState) Init(networkEndpoint NetworkEndpoint, stack *Stack) {
 	a.networkEndpoint = networkEndpoint
+	a.stack = stack
 
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -242,6 +244,33 @@ func (a *AddressableEndpointState) addAndAcquireAddressLocked(addr tcpip.Address
 		// We never promote an address to temporary - it can only be added as such.
 		// If we are actaully adding a permanent address, it is promoted below.
 		addrState.mu.kind = Temporary
+
+		if properties.PreferredLifetime != nil {
+			addrState.mu.deprecationJob = a.stack.NewJob(&a.mu, func() {
+				state, ok := a.mu.endpoints[addr.Address]
+				if ok {
+					state.SetDeprecated(true)
+				}
+			})
+
+			addrState.mu.deprecationJob.Schedule(*properties.PreferredLifetime)
+		}
+		if properties.ValidLifetime != nil {
+			addrState.mu.invalidationJob = a.stack.NewJob(&a.mu, func() {
+				state, ok := a.mu.endpoints[addr.Address]
+				if ok {
+					if permanent {
+						if err := a.removePermanentEndpointLocked(state); err != nil {
+							panic(fmt.Sprintf("error removing address %v: %s", state.addr, err))
+						}
+					} else {
+						a.decAddressRefLocked(addrState)
+					}
+				}
+			})
+
+			addrState.mu.invalidationJob.Schedule(*properties.ValidLifetime)
+		}
 	}
 
 	// At this point we have an address we are either promoting from an expired or
@@ -624,6 +653,12 @@ type addressState struct {
 		kind       AddressKind
 		configType AddressConfigType
 		deprecated bool
+
+		// Job to deprecate the address.
+		deprecationJob *tcpip.Job
+
+		// Job to invalidate the address.
+		invalidationJob *tcpip.Job
 	}
 }
 

@@ -135,7 +135,7 @@ func (p *protocol) NewEndpoint(nic stack.NetworkInterface, dispatcher stack.Tran
 		protocol:   p,
 	}
 	e.mu.Lock()
-	e.mu.addressableEndpointState.Init(e)
+	e.mu.addressableEndpointState.Init(e, p.stack)
 	e.mu.igmp.init(e)
 	e.mu.Unlock()
 

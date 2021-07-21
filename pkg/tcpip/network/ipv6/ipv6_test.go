@@ -23,6 +23,7 @@ import (
 	"net"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"gvisor.dev/gvisor/pkg/tcpip"
@@ -3672,5 +3673,77 @@ func TestIcmpRateLimit(t *testing.T) {
 				testCase.check(t, e, round)
 			}
 		})
+	}
+}
+
+func TestTemporaryAndLifetimes(t *testing.T) {
+	clock := faketime.NewManualClock()
+	s := stack.New(stack.Options{
+		NetworkProtocols: []stack.NetworkProtocolFactory{NewProtocol},
+		Clock:            clock,
+	})
+	if err := s.CreateNIC(nicID, &stubLinkEndpoint{}); err != nil {
+		t.Fatalf("CreateNIC(%d, {}) = %s", nicID, err)
+	}
+
+	addAddress := func(preferredLifetime, validLifetime time.Duration, addr tcpip.Address) {
+		protocolAddr := tcpip.ProtocolAddress{
+			Protocol:          ProtocolNumber,
+			AddressWithPrefix: addr.WithPrefix(),
+		}
+		properties := stack.AddressProperties{
+			PreferredLifetime: &preferredLifetime,
+			ValidLifetime:     &validLifetime,
+		}
+		if err := s.AddProtocolAddress(nicID, protocolAddr, properties); err != nil {
+			t.Fatalf("AddProtocolAddress(%d, %+v, %+v): %s", nicID, protocolAddr, properties, err)
+		}
+	}
+	// Add a temporary and a non-temporary address.
+	const jitter = 30 * time.Minute
+	addAddress(jitter /* preferredLifetime */, 2*time.Hour+jitter /* validLifetime */, addr1)
+	addAddress(time.Hour+jitter /* preferredLifetime */, 3*time.Hour+jitter /* validLifetime */, addr2)
+
+	proto := s.NetworkProtocolInstance(ProtocolNumber).(*protocol)
+	getOutgoingAddress := func() tcpip.AddressWithPrefix {
+		proto.mu.RLock()
+		defer proto.mu.RUnlock()
+
+		addrEp := proto.mu.eps[nicID].AcquireOutgoingPrimaryAddress(addr3, true /* allowExpired */)
+		defer addrEp.DecRef()
+
+		return addrEp.AddressWithPrefix()
+	}
+
+	{
+		got := getOutgoingAddress()
+		if got != addr1.WithPrefix() {
+			t.Fatalf("got: %s, want: %s; temporary/preferred should be preferred over non-temporary/preferred", got, addr1.WithPrefix())
+		}
+		clock.Advance(time.Hour)
+	}
+
+	{
+		got := getOutgoingAddress()
+		if got != addr2.WithPrefix() {
+			t.Fatalf("got: %s, want: %s; non-temporary/preferred should be preferred over temporary/valid", got, addr2.WithPrefix())
+		}
+		clock.Advance(time.Hour)
+	}
+
+	{
+		got := getOutgoingAddress()
+		if got != addr1.WithPrefix() {
+			t.Fatalf("got: %s, want: %s; temporary/valid should be preferred over non-temporary/valid", got, addr1.WithPrefix())
+		}
+		clock.Advance(time.Hour)
+	}
+
+	{
+		got := getOutgoingAddress()
+		if got != addr2.WithPrefix() {
+			t.Fatalf("got: %s, want: %s; non-temporary/valid should be preferred over invalidated temporary address", got, addr2.WithPrefix())
+		}
+		clock.Advance(time.Hour)
 	}
 }

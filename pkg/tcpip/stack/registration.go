@@ -361,14 +361,38 @@ const (
 	// per RFC 4941. Temporary SLAAC addresses are short-lived and are not
 	// to be valid (or preferred) forever; hence the term temporary.
 	AddressConfigSlaacTemp
+
+	// AddressConfigTemp is a temporary address endpoint added by an out-of-stack
+	// client (such as a DHCPv6 client). Like temporary SLAAC addresses, these are
+	// not valid (or preferred) forever.
+	AddressConfigTemp
 )
+
+// IsIPv6Temporary returns whether the address is an IPv6 temporary address,
+// which are preferred for outgoing connections over non-temporary IPv6
+// addresses.
+func (c AddressConfigType) IsIPv6Temporary() bool {
+	switch c {
+	case AddressConfigStatic:
+		return false
+	case AddressConfigSlaac:
+		return false
+	case AddressConfigSlaacTemp:
+		return true
+	case AddressConfigTemp:
+		return true
+	default:
+		panic(fmt.Sprintf("unknown address config type: %d", c))
+	}
+}
 
 // AddressProperties contains additional properties that can be configured when
 // adding an address.
 type AddressProperties struct {
-	PEB        PrimaryEndpointBehavior
-	ConfigType AddressConfigType
-	Deprecated bool
+	PEB                              PrimaryEndpointBehavior
+	ConfigType                       AddressConfigType
+	Deprecated                       bool
+	ValidLifetime, PreferredLifetime *time.Duration
 }
 
 // AssignableAddressEndpoint is a reference counted address endpoint that may be

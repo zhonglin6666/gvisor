@@ -257,7 +257,7 @@ func (f *fakeNetworkProtocol) NewEndpoint(nic stack.NetworkInterface, dispatcher
 		proto:      f,
 		dispatcher: dispatcher,
 	}
-	e.AddressableEndpointState.Init(e)
+	e.AddressableEndpointState.Init(e, nil)
 	return e
 }
 
@@ -2202,7 +2202,7 @@ func TestAddProtocolAddress(t *testing.T) {
 
 	addrLenRange := []int{4, 16}
 	behaviorRange := []stack.PrimaryEndpointBehavior{stack.CanBePrimaryEndpoint, stack.FirstPrimaryEndpoint, stack.NeverPrimaryEndpoint}
-	configTypeRange := []stack.AddressConfigType{stack.AddressConfigStatic, stack.AddressConfigSlaac, stack.AddressConfigSlaacTemp}
+	configTypeRange := []stack.AddressConfigType{stack.AddressConfigStatic, stack.AddressConfigSlaac, stack.AddressConfigSlaacTemp, stack.AddressConfigTemp}
 	deprecatedRange := []bool{false, true}
 	wantAddresses := make([]tcpip.ProtocolAddress, 0, len(addrLenRange)*len(behaviorRange)*len(configTypeRange)*len(deprecatedRange))
 	var addrGen addressGenerator
