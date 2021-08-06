@@ -111,7 +111,7 @@ func Kill(t *kernel.Task, args arch.SyscallArguments) (uintptr, *kernel.SyscallC
 			if tg == t.ThreadGroup() {
 				continue
 			}
-			if t.PIDNamespace().IDOfThreadGroup(tg) == kernel.InitTID {
+			if tg.IsInit() {
 				continue
 			}
 

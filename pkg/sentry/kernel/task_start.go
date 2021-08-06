@@ -275,7 +275,7 @@ func (ns *PIDNamespace) allocateTID() (ThreadID, error) {
 		// Next.
 		tid++
 		if tid > TasksLimit {
-			tid = InitTID + 1
+			tid = initTID + 1
 		}
 
 		// Is it available?

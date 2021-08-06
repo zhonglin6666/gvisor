@@ -214,6 +214,12 @@ func (t *Task) Clone(args *linux.CloneArgs) (ThreadID, *SyscallControl, error) {
 		return 0, nil, err
 	}
 
+	// If our parent is a child subreaper, or if it has a child subreaper,
+	// then this new task does as well.
+	if args.Flags&linux.CLONE_THREAD == 0 {
+		nt.tg.hasChildSubreaper = nt.parent.tg.isChildSubreaper || nt.parent.tg.hasChildSubreaper
+	}
+
 	// "A child process created via fork(2) inherits a copy of its parent's
 	// alternate signal stack settings" - sigaltstack(2).
 	//

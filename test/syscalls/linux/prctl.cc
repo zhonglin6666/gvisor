@@ -214,10 +214,46 @@ TEST(PrctlTest, RootDumpability) {
               SyscallFailsWithErrno(EINVAL));
 }
 
-TEST(PrctlTest, SetGetSubreaper) {
-  // Setting subreaper on PID 1 works vacuously because PID 1 is always a
-  // subreaper.
+TEST(PrctlTest, SimpleSetGetChildSubreaper) {
+  // Tasks start off not subreaper.
+  int is_subreaper = 0;
+  EXPECT_THAT(prctl(PR_GET_CHILD_SUBREAPER, &is_subreaper), SyscallSucceeds());
+  EXPECT_EQ(is_subreaper, 0);
+
+  // Set to 1.
   EXPECT_THAT(prctl(PR_SET_CHILD_SUBREAPER, 1), SyscallSucceeds());
+  EXPECT_THAT(prctl(PR_GET_CHILD_SUBREAPER, &is_subreaper), SyscallSucceeds());
+  EXPECT_EQ(is_subreaper, 1);
+
+  // Set to something positive but not 1.
+  EXPECT_THAT(prctl(PR_SET_CHILD_SUBREAPER, 42), SyscallSucceeds());
+  // Get still returns 1.
+  EXPECT_THAT(prctl(PR_GET_CHILD_SUBREAPER, &is_subreaper), SyscallSucceeds());
+  EXPECT_EQ(is_subreaper, 1);
+}
+
+TEST(PrctlTest, ThreadsInheritChildSubreaperBit) {
+  // Set child subreaper bit.
+  ASSERT_THAT(prctl(PR_SET_CHILD_SUBREAPER, 1), SyscallSucceeds());
+  ScopedThread thread([&] {
+    int is_subreaper = 0;
+    ASSERT_THAT(prctl(PR_GET_CHILD_SUBREAPER, &is_subreaper),
+                SyscallSucceeds());
+    EXPECT_EQ(is_subreaper, 1);
+  });
+}
+
+TEST(PrctlTest, ProcessesDoNotInheritChildSubreaperBit) {
+  // Set child subreaper bit.
+  ASSERT_THAT(prctl(PR_SET_CHILD_SUBREAPER, 1), SyscallSucceeds());
+
+  const auto rest = [&] {
+    int is_subreaper = 0;
+    TEST_CHECK_SUCCESS(prctl(PR_GET_CHILD_SUBREAPER, &is_subreaper));
+    TEST_CHECK(is_subreaper == 0);
+  };
+
+  EXPECT_THAT(InForkedProcess(rest), IsPosixErrorOkAndHolds(0));
 }
 
 }  // namespace

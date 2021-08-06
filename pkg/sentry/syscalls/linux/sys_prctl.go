@@ -222,17 +222,17 @@ func Prctl(t *kernel.Task, args arch.SyscallArguments) (uintptr, *kernel.Syscall
 	case linux.PR_SET_CHILD_SUBREAPER:
 		// "If arg2 is nonzero, set the "child subreaper" attribute of
 		// the calling process; if arg2 is zero, unset the attribute."
-		//
-		// TODO(gvisor.dev/issues/2323): We only support setting, and
-		// only if the task is already TID 1 in the PID namespace,
-		// because it already acts as a subreaper in that case.
-		isPid1 := t.PIDNamespace().IDOfTask(t) == kernel.InitTID
-		if args[1].Int() != 0 && isPid1 {
-			return 0, nil, nil
-		}
+		isSubreaper := args[1].Int() > 0
+		t.ThreadGroup().SetChildSubreaper(isSubreaper)
+		return 0, nil, nil
 
-		t.Kernel().EmitUnimplementedEvent(t)
-		return 0, nil, linuxerr.EINVAL
+	case linux.PR_GET_CHILD_SUBREAPER:
+		var isSubreaper int32
+		if t.ThreadGroup().GetChildSubreaper() {
+			isSubreaper = 1
+		}
+		_, err := primitive.CopyInt32Out(t, args[1].Pointer(), isSubreaper)
+		return 0, nil, err
 
 	case linux.PR_GET_TIMING,
 		linux.PR_SET_TIMING,
@@ -245,7 +245,6 @@ func Prctl(t *kernel.Task, args arch.SyscallArguments) (uintptr, *kernel.Syscall
 		linux.PR_MCE_KILL,
 		linux.PR_MCE_KILL_GET,
 		linux.PR_GET_TID_ADDRESS,
-		linux.PR_GET_CHILD_SUBREAPER,
 		linux.PR_GET_THP_DISABLE,
 		linux.PR_SET_THP_DISABLE,
 		linux.PR_MPX_ENABLE_MANAGEMENT,
