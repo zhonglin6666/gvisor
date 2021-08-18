@@ -40,13 +40,22 @@ type physicalRegion struct {
 // physical offset, aligned appropriately and starting above reservedMemory.
 var physicalRegions []physicalRegion
 
+// VirtualAddressSpaceSize is the size of the sentry virtual address space.
+//
+// The memory overhead of each 1GB of virtual address space is about 2MB.
+//
+// The default value 64GB is chosen to pass all tests.
+var VirtualAddressSpaceSize = uintptr(1) << 36
+
 // fillAddressSpace fills the host address space with PROT_NONE mappings until
 // we have a host address space size that is less than or equal to the physical
 // address space. This allows us to have an injective host virtual to guest
 // physical mapping.
 //
 // The excluded regions are returned.
-func fillAddressSpace() (excludedRegions []region) {
+func fillAddressSpace(m *machine) (excludedRegions []region) {
+	slots := (uintptr)(m.maxSlots)
+
 	// We can cut vSize in half, because the kernel will be using the top
 	// half and we ignore it while constructing mappings. It's as if we've
 	// already excluded half the possible addresses.
@@ -57,6 +66,9 @@ func fillAddressSpace() (excludedRegions []region) {
 	// physical addresses that are beyond what is mapped.
 	pSize := uintptr(1) << ring0.PhysicalAddressBits()
 	pSize -= reservedMemory
+	if pSize > VirtualAddressSpaceSize {
+		pSize = VirtualAddressSpaceSize
+	}
 
 	// Add specifically excluded regions; see excludeVirtualRegion.
 	applyVirtualRegions(func(vr virtualRegion) {
@@ -66,6 +78,10 @@ func fillAddressSpace() (excludedRegions []region) {
 			log.Infof("excluded: virtual [%x,%x)", vr.virtual, vr.virtual+vr.length)
 		}
 	})
+
+	if (slots-uintptr(len(excludedRegions)))*faultBlockSize < pSize {
+		pSize = (slots - uintptr(len(excludedRegions))) * faultBlockSize
+	}
 
 	// Do we need any more work?
 	if vSize < pSize {
@@ -89,7 +105,10 @@ func fillAddressSpace() (excludedRegions []region) {
 	}
 	required := uintptr(requiredAddr)
 	current := required // Attempted mmap size.
-	for filled := uintptr(0); filled < required && current > 0; {
+	for filled := uintptr(0); filled < required && current >= faultBlockSize; {
+		if current > required-filled {
+			current = required - filled
+		}
 		addr, _, errno := unix.RawSyscall6(
 			unix.SYS_MMAP,
 			0, // Suggested address.
@@ -97,6 +116,7 @@ func fillAddressSpace() (excludedRegions []region) {
 			unix.PROT_NONE,
 			unix.MAP_ANONYMOUS|unix.MAP_PRIVATE|unix.MAP_NORESERVE,
 			0, 0)
+		log.Debugf("%x (%d) = mmap(%x of %x)", addr, errno, current, required-filled)
 		if errno != 0 {
 			// Attempt half the size; overflow not possible.
 			currentAddr, _ := hostarch.Addr(current >> 1).RoundUp()
@@ -114,7 +134,7 @@ func fillAddressSpace() (excludedRegions []region) {
 			required += faultBlockSize
 		}
 	}
-	if current == 0 {
+	if current < faultBlockSize {
 		panic("filling address space failed")
 	}
 	sort.Slice(excludedRegions, func(i, j int) bool {
@@ -177,8 +197,15 @@ func computePhysicalRegions(excludedRegions []region) (physicalRegions []physica
 }
 
 // physicalInit initializes physical address mappings.
-func physicalInit() {
-	physicalRegions = computePhysicalRegions(fillAddressSpace())
+func physicalInit(m *machine) {
+	bs := VirtualAddressSpaceSize / uintptr(m.maxSlots)
+	faultBlockSize = hostarch.PageSize
+	for faultBlockSize < bs {
+		faultBlockSize *= 2
+	}
+	faultBlockMask = ^uintptr(faultBlockSize - 1)
+	log.Debugf("Address space size %d\nSlots %d\nSlot size %d", VirtualAddressSpaceSize, m.maxSlots, faultBlockSize)
+	physicalRegions = computePhysicalRegions(fillAddressSpace(m))
 }
 
 // applyPhysicalRegions applies the given function on physical regions.
