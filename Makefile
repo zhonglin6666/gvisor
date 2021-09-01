@@ -240,7 +240,7 @@ simple-tests: unit-tests # Compatibility target.
 .PHONY: simple-tests
 
 # Standard integration targets.
-INTEGRATION_TARGETS := //test/image:image_test //test/e2e:integration_test
+INTEGRATION_TARGETS := //test/e2e:integration_test
 
 docker-tests: load-basic $(RUNTIME_BIN)
 	@$(call install_runtime,$(RUNTIME),) # Clear flags.
@@ -267,9 +267,12 @@ hostnet-tests: load-basic $(RUNTIME_BIN)
 kvm-tests: load-basic $(RUNTIME_BIN)
 	@(lsmod | grep -E '^(kvm_intel|kvm_amd)') || sudo modprobe kvm
 	@if ! test -w /dev/kvm; then sudo chmod a+rw /dev/kvm; fi
-	@$(call test,//pkg/sentry/platform/kvm:kvm_test)
 	@$(call install_runtime,$(RUNTIME),--platform=kvm)
 	@$(call test_runtime,$(RUNTIME),$(INTEGRATION_TARGETS))
+
+logs:
+	cat /tmp/runsc/logs/runsc.log.*
+
 .PHONY: kvm-tests
 
 iptables-tests: load-iptables $(RUNTIME_BIN)
