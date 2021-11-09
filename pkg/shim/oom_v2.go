@@ -1,5 +1,5 @@
-// Copyright 2018 The containerd Authors.
-// Copyright 2018 The gVisor Authors.
+// Copyright The containerd Authors.
+// Copyright 2021 The gVisor Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -56,7 +56,7 @@ func (w *watcherV2) Close() error {
 }
 
 // Run the loop
-func (w *watcherV2) Run(ctx context.Context) {
+func (w *watcherV2) run(ctx context.Context) {
 	lastOOMMap := make(map[string]uint64) // key: id, value: ev.OOM
 	for {
 		select {
@@ -84,7 +84,7 @@ func (w *watcherV2) Run(ctx context.Context) {
 }
 
 // Add cgroups.Cgroup to the epoll monitor
-func (w *watcherV2) Add(id string, cgx interface{}) error {
+func (w *watcherV2) add(id string, cgx interface{}) error {
 	cg, ok := cgx.(*cgroupsv2.Manager)
 	if !ok {
 		return fmt.Errorf("expected *cgroupsv2.Manager, got: %T", cgx)

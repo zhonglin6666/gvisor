@@ -84,11 +84,12 @@ const (
 )
 
 type oomPoller interface {
-	// Add `cg` cgroup to oom poller. `cg` is cgroups.Cgroup in v1 and `cgroupsv2.Manager`
-	// in v2
-	Add(id string, cg interface{}) error
-	Run(ctx context.Context)
-	Close() error
+	io.Closer
+	// add adds `cg` cgroup to oom poller. `cg` is cgroups.Cgroup in v1 and
+	// `cgroupsv2.Manager` in v2
+	add(id string, cg interface{}) error
+	// run monitors oom event and notifies the shim about them
+	run(ctx context.Context)
 }
 
 // New returns a new shim service that can be used via GRPC.
@@ -110,7 +111,7 @@ func New(ctx context.Context, id string, publisher shim.Publisher, cancel func()
 	if err != nil {
 		return nil, err
 	}
-	go ep.Run(ctx)
+	go ep.run(ctx)
 	s := &service{
 		id:             id,
 		processes:      make(map[string]process.Process),
@@ -506,7 +507,7 @@ func (s *service) Create(ctx context.Context, r *taskAPI.CreateTaskRequest) (*ta
 		if err != nil {
 			return nil, fmt.Errorf("loading cgroup for %d: %w", pid, err)
 		}
-		if err := s.oomPoller.Add(s.id, cg); err != nil {
+		if err := s.oomPoller.add(s.id, cg); err != nil {
 			return nil, fmt.Errorf("add cg to OOM monitor: %w", err)
 		}
 	}

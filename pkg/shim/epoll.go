@@ -58,7 +58,7 @@ func (e *epoller) Close() error {
 	return unix.Close(e.fd)
 }
 
-func (e *epoller) Run(ctx context.Context) {
+func (e *epoller) run(ctx context.Context) {
 	var events [128]unix.EpollEvent
 	for {
 		select {
@@ -81,7 +81,7 @@ func (e *epoller) Run(ctx context.Context) {
 	}
 }
 
-func (e *epoller) Add(id string, cgx interface{}) error {
+func (e *epoller) add(id string, cgx interface{}) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	cg, ok := cgx.(cgroups.Cgroup)

@@ -232,14 +232,14 @@ func loadPathsHelper(cgroup, mountinfo io.Reader, unified bool) (map[string]stri
 		}
 		if len(tokens[1]) == 0 && unified {
 			paths[cgroup2Key] = tokens[2]
-		} else {
-			for _, ctrlr := range strings.Split(tokens[1], ",") {
-				// Remove prefix for cgroups with no controller, eg. systemd.
-				ctrlr = strings.TrimPrefix(ctrlr, "name=")
-				// Discard unknown controllers.
-				if _, ok := controllers[ctrlr]; ok {
-					paths[ctrlr] = tokens[2]
-				}
+			continue
+		}
+		for _, ctrlr := range strings.Split(tokens[1], ",") {
+			// Remove prefix for cgroups with no controller, eg. systemd.
+			ctrlr = strings.TrimPrefix(ctrlr, "name=")
+			// Discard unknown controllers.
+			if _, ok := controllers[ctrlr]; ok {
+				paths[ctrlr] = tokens[2]
 			}
 		}
 	}
@@ -368,7 +368,7 @@ func new(pid, cgroupsPath string) (Cgroup, error) {
 			// that, instead, use the its parent which should not have tasks in it.
 			cgroupsPath = filepath.Join(filepath.Dir(p), cgroupsPath)
 		}
-		// assume that for v2, cgroup is always mount at cgroupRoot
+		// assume that for v2, cgroup is always mounted at cgroupRoot.
 		cg, err = newCgroupV2(cgroupRoot, cgroupsPath)
 	} else {
 		cg = &cgroupV1{

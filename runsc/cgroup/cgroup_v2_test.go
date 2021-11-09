@@ -1,5 +1,5 @@
-// Copyright 2018 The containerd Authors.
-// Copyright 2018 The gVisor Authors.
+// Copyright The runc Authors.
+// Copyright 2021 The gVisor Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,9 +19,7 @@ import (
 	"testing"
 )
 
-var cgroupv2MountInfo = `
-29 22 0:26 / /sys/fs/cgroup rw shared:4 - cgroup2 cgroup2 rw,seclabel,nsdelegate
-`
+var cgroupv2MountInfo = `29 22 0:26 / /sys/fs/cgroup rw shared:4 - cgroup2 cgroup2 rw,seclabel,nsdelegate`
 
 func TestLoadPathsCgroupv2(t *testing.T) {
 	for _, tc := range []struct {

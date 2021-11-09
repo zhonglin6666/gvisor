@@ -110,27 +110,26 @@ func TestMemCgroup(t *testing.T) {
 			continue
 		}
 
-		// v2 does not ahve max_usage_in_bytes equivalent
+		// v2 does not have max_usage_in_bytes equivalent
 		if cgroup.IsOnlyV2() {
 			return
-		} else {
-			// Read the cgroup memory usage.
-			path = filepath.Join("/sys/fs/cgroup/memory/docker", gid, "memory.max_usage_in_bytes")
-			outRaw, err = ioutil.ReadFile(path)
-			if err != nil {
-				t.Fatalf("error reading usage: %v", err)
-			}
-			out = strings.TrimSpace(string(outRaw))
-			memUsage, err = strconv.Atoi(out)
-			if err != nil {
-				t.Fatalf("Atoi(%v): %v", out, err)
-			}
-			t.Logf("read usage: %v, wanted: %v", memUsage, allocMemSize)
+		}
+		// Read the cgroup memory usage.
+		path = filepath.Join("/sys/fs/cgroup/memory/docker", gid, "memory.max_usage_in_bytes")
+		outRaw, err = ioutil.ReadFile(path)
+		if err != nil {
+			t.Fatalf("error reading usage: %v", err)
+		}
+		out = strings.TrimSpace(string(outRaw))
+		memUsage, err = strconv.Atoi(out)
+		if err != nil {
+			t.Fatalf("Atoi(%v): %v", out, err)
+		}
+		t.Logf("read usage: %v, wanted: %v", memUsage, allocMemSize)
 
-			// Are we done?
-			if memUsage >= allocMemSize {
-				return
-			}
+		// Are we done?
+		if memUsage >= allocMemSize {
+			return
 		}
 	}
 
