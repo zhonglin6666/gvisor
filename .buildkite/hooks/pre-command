@@ -1,3 +1,7 @@
+# Download any build-specific configuration that has been uploaded.
+# This allows top-level steps to override all subsequent steps.
+buildkite-agent artifact download 'tools/bazeldefs/*' . || true
+
 # Install packages we need. Docker must be installed and configured,
 # as should Go itself. We just install some extra bits and pieces.
 function install_pkgs() {

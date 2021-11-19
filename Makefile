@@ -217,18 +217,8 @@ network-tests: ## Run all networking integration tests.
 network-tests: iptables-tests packetdrill-tests packetimpact-tests
 .PHONY: network-tests
 
-# The set of system call targets.
-SYSCALL_TARGETS := test/syscalls/... test/fuse/...
-
-syscall-%-tests:
-	@$(call test,--test_tag_filters=runsc_$* $(PARTITIONS) test/syscalls/...)
-
-syscall-native-tests:
-	@$(call test,--test_tag_filters=native $(PARTITIONS) test/syscalls/...)
-.PHONY: syscall-native-tests
-
-syscall-tests: ## Run all system call tests.
-	@$(call test,$(PARTITIONS) test/syscalls/...)
+syscall-tests: $(RUNTIME_BIN) ## Run all system call tests.
+	@$(call test,--test_arg=--runsc=$(RUNTIME_BIN) $(PARTITIONS) test/syscalls/... test/fuse/...)
 .PHONY: syscall-tests
 
 %-runtime-tests: load-runtimes_% $(RUNTIME_BIN)
