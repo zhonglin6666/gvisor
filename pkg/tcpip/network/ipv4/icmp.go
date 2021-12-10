@@ -20,6 +20,7 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/buffer"
 	"gvisor.dev/gvisor/pkg/tcpip/header"
+	"gvisor.dev/gvisor/pkg/tcpip/header/parse"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 )
 
@@ -308,6 +309,9 @@ func (e *endpoint) handleICMP(pkt *stack.PacketBuffer) {
 		replyIPHdr.SetSourceAddress(r.LocalAddress())
 		replyIPHdr.SetDestinationAddress(r.RemoteAddress())
 		replyIPHdr.SetTTL(r.DefaultTTL())
+		replyIPHdr.SetTotalLength(uint16(len(replyIPHdr) + len(replyData)))
+		replyIPHdr.SetChecksum(0)
+		replyIPHdr.SetChecksum(^replyIPHdr.CalculateChecksum())
 
 		replyICMPHdr := header.ICMPv4(replyData)
 		replyICMPHdr.SetType(header.ICMPv4EchoReply)
@@ -321,9 +325,20 @@ func (e *endpoint) handleICMP(pkt *stack.PacketBuffer) {
 			Data:               replyVV,
 		})
 		defer replyPkt.DecRef()
-		replyPkt.TransportProtocolNumber = header.ICMPv4ProtocolNumber
+		if ok := parse.IPv4(replyPkt); !ok {
+			panic("expected to parse IPv4 header we just created")
+		}
+		if ok := parse.ICMPv4(replyPkt); !ok {
+			panic("expected to parse ICMPv4 header we just created")
+		}
 
-		if err := r.WriteHeaderIncludedPacket(replyPkt); err != nil {
+		ep, ok := e.protocol.getEndpointForNIC(r.NICID())
+		if !ok {
+			// The outgoing NIC went away.
+			sent.dropped.Increment()
+			return
+		}
+		if err := ep.writePacket(r, replyPkt); err != nil {
 			sent.dropped.Increment()
 			return
 		}
