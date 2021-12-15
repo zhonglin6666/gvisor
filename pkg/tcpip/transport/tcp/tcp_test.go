@@ -3482,8 +3482,22 @@ func TestSetTTL(t *testing.T) {
 						t.Fatalf("NewEndpoint failed: %s", err)
 					}
 
-					if err := c.EP.SetSockOptInt(tcpip.TTLOption, int(wantTTL)); err != nil {
-						t.Fatalf("SetSockOptInt(TTLOption, %d) failed: %s", wantTTL, err)
+					var relevantOpt tcpip.SockOptInt
+					var irrelevantOpt tcpip.SockOptInt
+					if test.protoNum == ipv4.ProtocolNumber {
+						relevantOpt = tcpip.IPv4TTLOption
+						irrelevantOpt = tcpip.IPv6HopLimitOption
+					} else {
+						relevantOpt = tcpip.IPv6HopLimitOption
+						irrelevantOpt = tcpip.IPv4TTLOption
+					}
+					if err := c.EP.SetSockOptInt(relevantOpt, int(wantTTL)); err != nil {
+						t.Fatalf("SetSockOptInt(%d, %d) failed: %s", relevantOpt, wantTTL, err)
+					}
+					// Set a different ttl/hoplimit for the unused protocol, showing that
+					// it does not affect the other protocoll.
+					if err := c.EP.SetSockOptInt(irrelevantOpt, int(wantTTL+1)); err != nil {
+						t.Fatalf("SetSockOptInt(%d, %d) failed: %s", irrelevantOpt, wantTTL, err)
 					}
 
 					{
