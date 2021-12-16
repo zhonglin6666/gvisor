@@ -22,6 +22,8 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 )
 
+var _ stack.LinkEndpoint = (*countedEndpoint)(nil)
+
 type countedEndpoint struct {
 	dispatchCount int
 	writeCount    int
@@ -69,11 +71,6 @@ func (e *countedEndpoint) LinkAddress() tcpip.LinkAddress {
 	return e.linkAddr
 }
 
-func (e *countedEndpoint) WritePacket(stack.RouteInfo, tcpip.NetworkProtocolNumber, *stack.PacketBuffer) tcpip.Error {
-	e.writeCount++
-	return nil
-}
-
 // WritePackets implements stack.LinkEndpoint.WritePackets.
 func (e *countedEndpoint) WritePackets(_ stack.RouteInfo, pkts stack.PacketBufferList, _ tcpip.NetworkProtocolNumber) (int, tcpip.Error) {
 	e.writeCount += pkts.Len()
@@ -102,22 +99,28 @@ func TestWaitWrite(t *testing.T) {
 	ep := &countedEndpoint{}
 	wep := New(ep)
 
+	var pkts stack.PacketBufferList
+	pkts.PushBack(stack.NewPacketBuffer(stack.PacketBufferOptions{}))
 	// Write and check that it goes through.
-	wep.WritePacket(stack.RouteInfo{}, 0, stack.NewPacketBuffer(stack.PacketBufferOptions{}))
+	wep.WritePackets(stack.RouteInfo{}, pkts, 0)
 	if want := 1; ep.writeCount != want {
 		t.Fatalf("Unexpected writeCount: got=%v, want=%v", ep.writeCount, want)
 	}
+	pkts.Reset()
 
+	pkts.PushBack(stack.NewPacketBuffer(stack.PacketBufferOptions{}))
 	// Wait on dispatches, then try to write. It must go through.
 	wep.WaitDispatch()
-	wep.WritePacket(stack.RouteInfo{}, 0, stack.NewPacketBuffer(stack.PacketBufferOptions{}))
+	wep.WritePackets(stack.RouteInfo{}, pkts, 0)
 	if want := 2; ep.writeCount != want {
 		t.Fatalf("Unexpected writeCount: got=%v, want=%v", ep.writeCount, want)
 	}
+	pkts.Reset()
 
+	pkts.PushBack(stack.NewPacketBuffer(stack.PacketBufferOptions{}))
 	// Wait on writes, then try to write. It must not go through.
 	wep.WaitWrite()
-	wep.WritePacket(stack.RouteInfo{}, 0, stack.NewPacketBuffer(stack.PacketBufferOptions{}))
+	wep.WritePackets(stack.RouteInfo{}, pkts, 0)
 	if want := 2; ep.writeCount != want {
 		t.Fatalf("Unexpected writeCount: got=%v, want=%v", ep.writeCount, want)
 	}
